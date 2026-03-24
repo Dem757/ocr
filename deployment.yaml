@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ocr-frontend:latest
-        imagePullPolicy: Never # Mert a helyi runner építi a képet
+        image: realdem757/ocr-frontend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
 ---
@@ -30,4 +30,4 @@ spec:
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30007 # Ezen a porton éred majd el a VM IP-címén
+      nodePort: 30007
