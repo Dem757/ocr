@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Cloud App</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+        .status { color: #d9534f; font-weight: bold; }
+        .container { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>OCR Alapú Felhőalkalmazás</h1>
+    <div class="container">
+        <p><strong>Állapot:</strong> <span class="status">CI/CD Teszt Üzemmód</span></p>
+        <p>Ez az oldal automatikusan frissült a GitHub Actions segítségével a K3s klaszteren.</p>
+        
+        <hr>
+        
+        <h3>Kép feltöltése (Fejlesztés alatt)</h3>
+        <form>
+            <input type="file" accept="image/*"><br><br>
+            <input type="text" placeholder="Rövid leírás..."><br><br>
+            <button type="button" disabled>Feltöltés és OCR futtatása</button>
+        </form>
+    </div>
+    
+    <footer>
+        <p><small>BMEVITMMB11 - Házi feladat 2026</small></p>
+    </footer>
+</body>
+</html>
