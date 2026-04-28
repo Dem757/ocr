@@ -30,5 +30,5 @@ jobs:
         
       - name: Deploy to K3s
         run: |
-          sudo kubectl apply -f deployment.yaml
-          sudo kubectl rollout restart deployment ocr-web-frontend
+          kubectl apply -f deployment.yaml
+          kubectl rollout restart deployment ocr-web-frontend
