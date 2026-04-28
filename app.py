@@ -1,6 +1,6 @@
 import os, psycopg2, pytesseract
 from psycopg2 import OperationalError
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, send_from_directory
 from PIL import Image, ImageDraw
 
 app = Flask(__name__)
@@ -8,6 +8,8 @@ UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
 db_pass = os.getenv('DB_PASS')
 db_url = os.getenv('DATABASE_URL') or f"host=ocr-db port=5444 dbname=ocrdb user=user password={db_pass}"
 db_ready = False
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Adatbázis inicializálás [cite: 92]
 def init_db():
@@ -42,9 +44,38 @@ def save_upload_record(filename, description, ocr_text):
     except OperationalError as exc:
         print(f'Failed to save upload record: {exc}')
 
+
+def get_uploads():
+    if not db_ready:
+        return []
+
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("SELECT filename, description, ocr_text FROM uploads ORDER BY id DESC")
+        uploads = [
+            {
+                "filename": row[0],
+                "description": row[1],
+                "ocr_text": row[2],
+            }
+            for row in cur.fetchall()
+        ]
+        cur.close()
+        conn.close()
+        return uploads
+    except OperationalError as exc:
+        print(f'Failed to load uploads: {exc}')
+        return []
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', uploads=get_uploads())
+
+
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 @app.route('/upload', methods=['POST'])
 def upload():

@@ -167,6 +167,100 @@
             line-height: 1.65;
         }
 
+        .gallery-section {
+            margin-top: 1.25rem;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .gallery-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .gallery-header h2 {
+            margin: 0;
+            font-size: clamp(1.4rem, 2vw, 2rem);
+        }
+
+        .gallery-header p {
+            margin: 0;
+            max-width: 42rem;
+            color: var(--muted);
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .upload-card {
+            overflow: hidden;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(22, 32, 51, 0.08);
+            box-shadow: 0 18px 48px rgba(22, 32, 51, 0.12);
+        }
+
+        .upload-image {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            display: block;
+            background: rgba(22, 32, 51, 0.05);
+        }
+
+        .upload-body {
+            padding: 1rem;
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .upload-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            align-items: start;
+        }
+
+        .upload-meta strong {
+            font-size: 1rem;
+            line-height: 1.35;
+        }
+
+        .upload-meta span {
+            white-space: nowrap;
+            font-size: 0.82rem;
+            color: var(--muted);
+            background: rgba(22, 72, 255, 0.08);
+            border-radius: 999px;
+            padding: 0.25rem 0.6rem;
+        }
+
+        .ocr-text {
+            margin: 0;
+            padding: 0.85rem 0.9rem;
+            border-radius: 16px;
+            background: rgba(22, 32, 51, 0.04);
+            color: var(--text);
+            line-height: 1.6;
+            font-size: 0.95rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .empty-state {
+            padding: 1.25rem;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.65);
+            border: 1px dashed rgba(22, 32, 51, 0.12);
+            color: var(--muted);
+        }
+
         form {
             display: grid;
             gap: 1rem;
@@ -335,6 +429,38 @@
                     </div>
                 </form>
             </div>
+        </section>
+    </main>
+
+    <main class="shell">
+        <section class="gallery-section">
+            <div class="gallery-header">
+                <div>
+                    <h2>Feltöltött képek</h2>
+                    <p>Itt láthatod a korábban feldolgozott képeket a felismerett szöveggel együtt.</p>
+                </div>
+            </div>
+
+            {% if uploads %}
+            <div class="gallery">
+                {% for upload in uploads %}
+                <article class="upload-card">
+                    <img class="upload-image" src="{{ url_for('uploaded_file', filename=upload.filename) }}" alt="Feldolgozott kép {{ loop.index }}">
+                    <div class="upload-body">
+                        <div class="upload-meta">
+                            <strong>{{ upload.description }}</strong>
+                            <span>{{ upload.filename }}</span>
+                        </div>
+                        <p class="ocr-text">{{ upload.ocr_text if upload.ocr_text else 'Nincs felismerhető szöveg.' }}</p>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                Még nincs feldolgozott feltöltés. Az első kép után itt jelenik meg az előnézet és az OCR szöveg.
+            </div>
+            {% endif %}
         </section>
     </main>
 
