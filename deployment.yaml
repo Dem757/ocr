@@ -45,6 +45,7 @@ spec:
     app: ocr-db
   ports:
     - port: 5432
+      targetPort: 5444
 ---
 apiVersion: apps/v1
 kind: Deployment
