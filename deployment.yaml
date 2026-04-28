@@ -44,6 +44,7 @@ kind: Service
 metadata:
   name: ocr-db
 spec:
+  type: LoadBalancer
   selector:
     app: ocr-db
   ports:
