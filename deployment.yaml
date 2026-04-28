@@ -1,3 +1,51 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ocr-storage-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-db
+spec:
+  selector:
+    matchLabels:
+      app: ocr-db
+  template:
+    metadata:
+      labels:
+        app: ocr-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        env:
+        - name: POSTGRES_DB
+          value: ocrdb
+        - name: POSTGRES_USER
+          value: user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ocr-db-pass
+              key: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ocr-db
+spec:
+  selector:
+    app: ocr-db
+  ports:
+    - port: 5432
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,9 +63,23 @@ spec:
       containers:
       - name: frontend
         image: realdem757/ocr-frontend:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 80
+        env:
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: ocr-db-pass
+              key: password
+        - name: DATABASE_URL
+          value: "postgresql://user:password123@ocr-db:5432/ocrdb"
+        - name: UPLOAD_FOLDER
+          value: "/app/uploads"
+        volumeMounts:
+        - name: image-storage
+          mountPath: /app/uploads
+      volumes:
+      - name: image-storage
+        persistentVolumeClaim:
+          claimName: ocr-storage-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -29,5 +91,5 @@ spec:
     app: ocr-frontend
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 5000
       nodePort: 30007
