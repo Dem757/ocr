@@ -25,6 +25,9 @@ spec:
       containers:
       - name: postgres
         image: postgres:15
+        args:
+        - -p
+        - "5444"
         env:
         - name: POSTGRES_DB
           value: ocrdb
@@ -44,7 +47,7 @@ spec:
   selector:
     app: ocr-db
   ports:
-    - port: 5432
+    - port: 5444
       targetPort: 5444
 ---
 apiVersion: apps/v1
@@ -70,8 +73,6 @@ spec:
             secretKeyRef:
               name: ocr-db-pass
               key: password
-        - name: DATABASE_URL
-          value: "postgresql://user:password123@ocr-db:5432/ocrdb"
         - name: UPLOAD_FOLDER
           value: "/app/uploads"
         volumeMounts:

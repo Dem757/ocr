@@ -1,21 +1,46 @@
 import os, psycopg2, pytesseract
+from psycopg2 import OperationalError
 from flask import Flask, render_template, request, redirect
 from PIL import Image, ImageDraw
 
 app = Flask(__name__)
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
 db_pass = os.getenv('DB_PASS')
-db_url = f"host=ocr-db dbname=ocrdb user=user password={db_pass}"
+db_url = os.getenv('DATABASE_URL') or f"host=ocr-db port=5444 dbname=ocrdb user=user password={db_pass}"
+db_ready = False
 
 # Adatbázis inicializálás [cite: 92]
 def init_db():
-    conn = psycopg2.connect(db_url)
-    cur = conn.cursor()
-    cur.execute('''CREATE TABLE IF NOT EXISTS uploads 
-                   (id SERIAL PRIMARY KEY, filename TEXT, description TEXT, ocr_text TEXT)''')
-    conn.commit()
-    cur.close()
-    conn.close()
+    global db_ready
+
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS uploads 
+                       (id SERIAL PRIMARY KEY, filename TEXT, description TEXT, ocr_text TEXT)''')
+        conn.commit()
+        cur.close()
+        conn.close()
+        db_ready = True
+    except OperationalError as exc:
+        db_ready = False
+        print(f'Database unavailable during startup: {exc}')
+
+
+def save_upload_record(filename, description, ocr_text):
+    if not db_ready:
+        return
+
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO uploads (filename, description, ocr_text) VALUES (%s, %s, %s)",
+                    (filename, description, ocr_text))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except OperationalError as exc:
+        print(f'Failed to save upload record: {exc}')
 
 @app.route('/')
 def index():
@@ -46,13 +71,7 @@ def upload():
         img.save(os.path.join(UPLOAD_FOLDER, proc_filename))
         
         # Mentés adatbázisba [cite: 92]
-        conn = psycopg2.connect(db_url)
-        cur = conn.cursor()
-        cur.execute("INSERT INTO uploads (filename, description, ocr_text) VALUES (%s, %s, %s)",
-                    (proc_filename, desc, " ".join(full_text)))
-        conn.commit()
-        cur.close()
-        conn.close()
+        save_upload_record(proc_filename, desc, " ".join(full_text))
         
     return redirect('/')
 
