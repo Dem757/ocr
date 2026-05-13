@@ -124,6 +124,16 @@ stringData:
   password: changeme
 
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: smtp-credentials
+type: Opaque
+stringData:
+  username: your-smtp-user
+  password: your-smtp-password
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -213,6 +223,22 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: rabbitmq-credentials
+                  key: password
+            - name: EMAIL_TO
+              value: demeny.balint@gmail.com
+            - name: SMTP_HOST
+              value: mx.vpk.bme.hu
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-credentials
+                  key: username
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smtp-credentials
                   key: password
           volumeMounts:
             - name: image-storage

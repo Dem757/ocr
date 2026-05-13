@@ -1,11 +1,46 @@
-import os, psycopg2, pytesseract, json, time
+import os, psycopg2, pytesseract, json, time, smtplib
 from psycopg2 import OperationalError
 from PIL import Image, ImageDraw
 import pika
+from email.message import EmailMessage
 
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
 db_pass = os.getenv('DB_PASS')
 db_url = os.getenv('DATABASE_URL') or f"host=ocr-db port=5444 dbname=ocrdb user=user password={db_pass}"
+
+
+def send_email_notification(filename, description, ocr_text):
+    recipient = os.getenv('EMAIL_TO')
+    smtp_host = os.getenv('SMTP_HOST')
+    smtp_port = int(os.getenv('SMTP_PORT', '587'))
+    smtp_user = os.getenv('SMTP_USER')
+    smtp_pass = os.getenv('SMTP_PASS')
+    email_from = os.getenv('EMAIL_FROM', smtp_user or 'ocr@example.com')
+
+    if not recipient or not smtp_host:
+        print('Email notification skipped: EMAIL_TO or SMTP_HOST is not configured')
+        return
+
+    message = EmailMessage()
+    message['Subject'] = f'OCR completed: {filename}'
+    message['From'] = email_from
+    message['To'] = recipient
+    message.set_content(
+        f"OCR processing finished.\n\n"
+        f"File: {filename}\n"
+        f"Description: {description}\n"
+        f"Detected text: {ocr_text or '(none)'}\n"
+    )
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            if smtp_user and smtp_pass:
+                server.login(smtp_user, smtp_pass)
+            server.send_message(message)
+        print(f'Notification email sent to {recipient}')
+    except Exception as exc:
+        print(f'Failed to send notification email: {exc}')
 
 
 def init_db():
@@ -58,7 +93,9 @@ def process_task(body):
 
         proc_filename = "proc_" + filename
         img.save(os.path.join(upload_folder, proc_filename))
-        save_upload_record(proc_filename, description, " ".join(full_text))
+        ocr_text = " ".join(full_text)
+        save_upload_record(proc_filename, description, ocr_text)
+        send_email_notification(proc_filename, description, ocr_text)
     except Exception as exc:
         print(f'Error processing task: {exc}')
 
