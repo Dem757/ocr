@@ -1,0 +1,96 @@
+import os, psycopg2, pytesseract, json, time
+from psycopg2 import OperationalError
+from PIL import Image, ImageDraw
+import pika
+
+UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
+db_pass = os.getenv('DB_PASS')
+db_url = os.getenv('DATABASE_URL') or f"host=ocr-db port=5444 dbname=ocrdb user=user password={db_pass}"
+
+
+def init_db():
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS uploads 
+                       (id SERIAL PRIMARY KEY, filename TEXT, description TEXT, ocr_text TEXT)''')
+        conn.commit()
+        cur.close()
+        conn.close()
+    except OperationalError as exc:
+        print(f'Database unavailable during worker startup: {exc}')
+
+
+def save_upload_record(filename, description, ocr_text):
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO uploads (filename, description, ocr_text) VALUES (%s, %s, %s)",
+                    (filename, description, ocr_text))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except OperationalError as exc:
+        print(f'Failed to save upload record: {exc}')
+
+
+def process_task(body):
+    try:
+        task = json.loads(body)
+        filename = task.get('filename')
+        filepath = task.get('filepath')
+        description = task.get('description', '')
+        upload_folder = task.get('upload_folder', UPLOAD_FOLDER)
+
+        img = Image.open(filepath)
+        d = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        draw = ImageDraw.Draw(img)
+
+        full_text = []
+        for i in range(len(d['text'])):
+            try:
+                if int(d['conf'][i]) > 60:
+                    (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
+                    draw.rectangle([x, y, x + w, y + h], outline="red", width=3)
+                    full_text.append(d['text'][i])
+            except Exception:
+                continue
+
+        proc_filename = "proc_" + filename
+        img.save(os.path.join(upload_folder, proc_filename))
+        save_upload_record(proc_filename, description, " ".join(full_text))
+    except Exception as exc:
+        print(f'Error processing task: {exc}')
+
+
+def main():
+    init_db()
+    rabbit_host = os.getenv('RABBITMQ_HOST', 'rabbitmq')
+    rabbit_user = os.getenv('RABBITMQ_USER')
+    rabbit_pass = os.getenv('RABBITMQ_PASS')
+    creds = None
+    if rabbit_user and rabbit_pass:
+        creds = pika.PlainCredentials(rabbit_user, rabbit_pass)
+    params = pika.ConnectionParameters(host=rabbit_host, credentials=creds) if creds else pika.ConnectionParameters(host=rabbit_host)
+
+    while True:
+        try:
+            connection = pika.BlockingConnection(params)
+            channel = connection.channel()
+            channel.queue_declare(queue='ocr_tasks', durable=True)
+
+            for method, properties, body in channel.consume('ocr_tasks', inactivity_timeout=1):
+                if body:
+                    process_task(body)
+                    channel.basic_ack(method.delivery_tag)
+                else:
+                    # no message, continue loop
+                    pass
+
+        except Exception as exc:
+            print(f'Worker connection error: {exc}')
+            time.sleep(5)
+
+
+if __name__ == '__main__':
+    main()

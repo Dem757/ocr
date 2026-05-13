@@ -1,4 +1,5 @@
-import os, psycopg2, pytesseract
+import os, psycopg2, pytesseract, json
+import pika
 from psycopg2 import OperationalError
 from flask import Flask, render_template, request, redirect, send_from_directory
 from PIL import Image, ImageDraw
@@ -85,24 +86,33 @@ def upload():
     if file:
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(filepath)
-        
-        # OCR és Bekeretezés [cite: 93]
-        img = Image.open(filepath)
-        d = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-        draw = ImageDraw.Draw(img)
-        
-        full_text = []
-        for i in range(len(d['text'])):
-            if int(d['conf'][i]) > 60:
-                (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
-                draw.rectangle([x, y, x + w, y + h], outline="red", width=3)
-                full_text.append(d['text'][i])
-        
-        proc_filename = "proc_" + file.filename
-        img.save(os.path.join(UPLOAD_FOLDER, proc_filename))
-        
-        # Mentés adatbázisba [cite: 92]
-        save_upload_record(proc_filename, desc, " ".join(full_text))
+        # Publish a task to RabbitMQ for asynchronous processing
+        msg = {
+            'filename': file.filename,
+            'filepath': filepath,
+            'description': desc,
+            'upload_folder': UPLOAD_FOLDER
+        }
+        try:
+            rabbit_host = os.getenv('RABBITMQ_HOST', 'rabbitmq')
+            rabbit_user = os.getenv('RABBITMQ_USER')
+            rabbit_pass = os.getenv('RABBITMQ_PASS')
+            creds = None
+            if rabbit_user and rabbit_pass:
+                creds = pika.PlainCredentials(rabbit_user, rabbit_pass)
+            params = pika.ConnectionParameters(host=rabbit_host, credentials=creds) if creds else pika.ConnectionParameters(host=rabbit_host)
+            connection = pika.BlockingConnection(params)
+            channel = connection.channel()
+            channel.queue_declare(queue='ocr_tasks', durable=True)
+            channel.basic_publish(
+                exchange='',
+                routing_key='ocr_tasks',
+                body=json.dumps(msg),
+                properties=pika.BasicProperties(delivery_mode=2)
+            )
+            connection.close()
+        except Exception as exc:
+            print(f'Failed to publish message to RabbitMQ: {exc}')
         
     return redirect('/')
 
