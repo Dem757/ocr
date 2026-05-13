@@ -8,6 +8,7 @@ spec:
   resources:
     requests:
       storage: 2Gi
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -23,21 +24,22 @@ spec:
         app: ocr-db
     spec:
       containers:
-      - name: postgres
-        image: postgres:15
-        args:
-        - -p
-        - "5444"
-        env:
-        - name: POSTGRES_DB
-          value: ocrdb
-        - name: POSTGRES_USER
-          value: user
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: ocr-db-pass
-              key: password
+        - name: postgres
+          image: postgres:15
+          args:
+            - -p
+            - "5444"
+          env:
+            - name: POSTGRES_DB
+              value: ocrdb
+            - name: POSTGRES_USER
+              value: user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ocr-db-pass
+                  key: password
+
 ---
 apiVersion: v1
 kind: Service
@@ -48,8 +50,10 @@ spec:
   selector:
     app: ocr-db
   ports:
-    - port: 5444
+    - name: postgres
+      port: 5444
       targetPort: 5444
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -66,33 +70,34 @@ spec:
         app: ocr-frontend
     spec:
       containers:
-      - name: frontend
-        image: realdem757/ocr-frontend:latest
-        env:
-        - name: DB_PASS
-          valueFrom:
-            secretKeyRef:
-              name: ocr-db-pass
-              key: password
-        - name: UPLOAD_FOLDER
-          value: "/app/uploads"
-        - name: RABBITMQ_USER
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: username
-        - name: RABBITMQ_PASS
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: password
-        volumeMounts:
-        - name: image-storage
-          mountPath: /app/uploads
+        - name: frontend
+          image: realdem757/ocr-frontend:latest
+          env:
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: ocr-db-pass
+                  key: password
+            - name: UPLOAD_FOLDER
+              value: "/app/uploads"
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: username
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: password
+          volumeMounts:
+            - name: image-storage
+              mountPath: /app/uploads
       volumes:
-      - name: image-storage
-        persistentVolumeClaim:
-          claimName: ocr-storage-pvc
+        - name: image-storage
+          persistentVolumeClaim:
+            claimName: ocr-storage-pvc
+
 ---
 apiVersion: v1
 kind: Service
@@ -103,11 +108,12 @@ spec:
   selector:
     app: ocr-frontend
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 5000
       nodePort: 30007
+
 ---
-# RabbitMQ credentials stored as a Kubernetes Secret
 apiVersion: v1
 kind: Secret
 metadata:
@@ -118,7 +124,6 @@ stringData:
   password: changeme
 
 ---
-# RabbitMQ deployment and service for task queue
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -134,22 +139,25 @@ spec:
         app: rabbitmq
     spec:
       containers:
-      - name: rabbitmq
-        image: rabbitmq:3-management
-        env:
-        - name: RABBITMQ_DEFAULT_USER
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: username
-        - name: RABBITMQ_DEFAULT_PASS
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: password
-        ports:
-        - containerPort: 5672
-        - containerPort: 15672
+        - name: rabbitmq
+          image: rabbitmq:3-management
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: password
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+
 ---
 apiVersion: v1
 kind: Service
@@ -160,12 +168,14 @@ spec:
   selector:
     app: rabbitmq
   ports:
-    - port: 5672
+    - name: amqp
+      port: 5672
       targetPort: 5672
-    - port: 15672
+    - name: management
+      port: 15672
       targetPort: 15672
+
 ---
-# Worker deployment to process OCR tasks from RabbitMQ
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -181,33 +191,33 @@ spec:
         app: ocr-worker
     spec:
       containers:
-      - name: worker
-        image: realdem757/ocr-frontend:latest
-        command: ["python", "worker.py"]
-        env:
-        - name: DB_PASS
-          valueFrom:
-            secretKeyRef:
-              name: ocr-db-pass
-              key: password
-        - name: UPLOAD_FOLDER
-          value: "/app/uploads"
-        - name: RABBITMQ_HOST
-          value: rabbitmq
-        - name: RABBITMQ_USER
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: username
-        - name: RABBITMQ_PASS
-          valueFrom:
-            secretKeyRef:
-              name: rabbitmq-credentials
-              key: password
-        volumeMounts:
-        - name: image-storage
-          mountPath: /app/uploads
+        - name: worker
+          image: realdem757/ocr-frontend:latest
+          command: ["python", "worker.py"]
+          env:
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: ocr-db-pass
+                  key: password
+            - name: UPLOAD_FOLDER
+              value: "/app/uploads"
+            - name: RABBITMQ_HOST
+              value: rabbitmq
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: username
+            - name: RABBITMQ_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credentials
+                  key: password
+          volumeMounts:
+            - name: image-storage
+              mountPath: /app/uploads
       volumes:
-      - name: image-storage
-        persistentVolumeClaim:
-          claimName: ocr-storage-pvc
+        - name: image-storage
+          persistentVolumeClaim:
+            claimName: ocr-storage-pvc
