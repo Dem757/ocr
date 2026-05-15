@@ -42,26 +42,26 @@ def send_email_notification(filename, description, ocr_text):
         log('SMTP_HOST not configured; skipping email')
         return
 
-    message = EmailMessage()
-    message['Subject'] = f'OCR completed: {filename}'
-    message['From'] = email_from
-    message.set_content(
-        f"OCR processing finished.\n\n"
-        f"File: {filename}\n"
-        f"Description: {description}\n"
-        f"Detected text: {ocr_text or '(none)'}\n"
-    )
-
     smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
     for recipient in subs:
         try:
-            message['To'] = recipient
+            msg = EmailMessage()
+            msg['Subject'] = f'OCR completed: {filename}'
+            msg['From'] = email_from
+            msg['To'] = recipient
+            msg.set_content(
+                f"OCR processing finished.\n\n"
+                f"File: {filename}\n"
+                f"Description: {description}\n"
+                f"Detected text: {ocr_text or '(none)'}\n"
+            )
+
             with smtp_class(smtp_host, smtp_port) as server:
                 if use_starttls and not use_ssl:
                     server.starttls()
                 if smtp_user and smtp_pass:
                     server.login(smtp_user, smtp_pass)
-                server.send_message(message)
+                server.send_message(msg)
             log(f'Notification email sent to {recipient}')
         except Exception as exc:
             log(f'Failed to send notification email to {recipient}: {exc}')
