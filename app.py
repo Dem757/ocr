@@ -50,6 +50,40 @@ def save_upload_record(filename, description, ocr_text):
         log(f'Failed to save upload record: {exc}')
 
 
+def delete_upload_record(filename):
+    if not db_ready:
+        return
+
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM uploads WHERE filename = %s", (filename,))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except OperationalError as exc:
+        log(f'Failed to delete upload record: {exc}')
+
+
+def delete_upload_files(filename):
+    filepaths = {
+        os.path.join(UPLOAD_FOLDER, filename),
+    }
+
+    if filename.startswith('proc_'):
+        filepaths.add(os.path.join(UPLOAD_FOLDER, filename.removeprefix('proc_')))
+    else:
+        filepaths.add(os.path.join(UPLOAD_FOLDER, f'proc_{filename}'))
+
+    for filepath in filepaths:
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                log(f'Deleted file {filepath}')
+        except OSError as exc:
+            log(f'Failed to delete file {filepath}: {exc}')
+
+
 def get_uploads():
     if not db_ready:
         return []
@@ -81,6 +115,14 @@ def index():
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
+
+
+@app.route('/delete/<path:filename>', methods=['POST'])
+def delete_upload(filename):
+    delete_upload_files(filename)
+    delete_upload_record(filename)
+    log(f'Deleted upload {filename}')
+    return redirect('/')
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -119,7 +161,7 @@ def upload():
             log(f'Published OCR task for {file.filename}')
         except Exception as exc:
             log(f'Failed to publish message to RabbitMQ: {exc}')
-        
+
     return redirect('/')
 
 if __name__ == '__main__':
