@@ -98,11 +98,47 @@ def save_upload_record(filename, description, ocr_text):
 def process_task(body):
     try:
         task = json.loads(body)
+        # If a recipient is provided, treat this as a notify-only message (catch-up)
+        recipient = task.get('recipient')
         filename = task.get('filename')
-        filepath = task.get('filepath')
         description = task.get('description', '')
+        ocr_text = task.get('ocr_text')
+        filepath = task.get('filepath')
         upload_folder = task.get('upload_folder', UPLOAD_FOLDER)
 
+        if recipient:
+            log(f'Notify-only task for {filename} -> {recipient}')
+            # send single email for this file to the provided recipient
+            try:
+                smtp_host = os.getenv('SMTP_HOST')
+                smtp_port = int(os.getenv('SMTP_PORT', '587'))
+                smtp_user = os.getenv('SMTP_USER')
+                smtp_pass = os.getenv('SMTP_PASS')
+                email_from = os.getenv('EMAIL_FROM', smtp_user or 'ocr@example.com')
+                use_ssl = os.getenv('SMTP_USE_SSL', 'false').lower() == 'true'
+                use_starttls = os.getenv('SMTP_USE_STARTTLS', 'true').lower() == 'true'
+
+                if not smtp_host:
+                    log('SMTP_HOST not configured; skipping notify-only email')
+                else:
+                    smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+                    msg = EmailMessage()
+                    msg['Subject'] = f'OCR result: {filename}'
+                    msg['From'] = email_from
+                    msg['To'] = recipient
+                    msg.set_content(f"File: {filename}\nDescription: {description}\n\nDetected text:\n{ocr_text or '(none)'}")
+                    with smtp_class(smtp_host, smtp_port) as server:
+                        if use_starttls and not use_ssl:
+                            server.starttls()
+                        if smtp_user and smtp_pass:
+                            server.login(smtp_user, smtp_pass)
+                        server.send_message(msg)
+                    log(f'Catch-up notification sent to {recipient} for {filename}')
+            except Exception as exc:
+                log(f'Failed to send catch-up notification to {recipient}: {exc}')
+            return
+
+        # otherwise, process OCR task as normal
         log(f'Processing task for {filename}')
 
         img = Image.open(filepath)

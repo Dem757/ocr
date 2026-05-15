@@ -260,16 +260,34 @@ def subscribe():
 
     added = add_subscriber(email)
     if added:
-        # send all existing uploads to the new subscriber
+        # enqueue notifications for the worker to send (avoid requiring SMTP in frontend)
         uploads = get_uploads()
-        for up in uploads:
-            subject = f'OCR result: {up["filename"] if isinstance(up, dict) else up[0]}'
-            # up structure from get_uploads is dict
-            fname = up['filename']
-            desc = up.get('description', '')
-            ocr_text = up.get('ocr_text', '')
-            body = f"File: {fname}\nDescription: {desc}\n\nDetected text:\n{ocr_text}"
-            send_email_via_smtp(email, subject, body)
+        try:
+            rabbit_host = os.getenv('RABBITMQ_HOST', 'rabbitmq')
+            rabbit_user = os.getenv('RABBITMQ_USER')
+            rabbit_pass = os.getenv('RABBITMQ_PASS')
+            creds = None
+            if rabbit_user and rabbit_pass:
+                creds = pika.PlainCredentials(rabbit_user, rabbit_pass)
+            params = pika.ConnectionParameters(host=rabbit_host, credentials=creds) if creds else pika.ConnectionParameters(host=rabbit_host)
+            connection = pika.BlockingConnection(params)
+            channel = connection.channel()
+            channel.queue_declare(queue='ocr_tasks', durable=True)
+            for up in uploads:
+                fname = up['filename']
+                desc = up.get('description', '')
+                ocr_text = up.get('ocr_text', '')
+                msg = {
+                    'filename': fname,
+                    'description': desc,
+                    'ocr_text': ocr_text,
+                    'recipient': email,
+                }
+                channel.basic_publish(exchange='', routing_key='ocr_tasks', body=json.dumps(msg), properties=pika.BasicProperties(delivery_mode=2))
+            connection.close()
+            log(f'Enqueued {len(uploads)} catch-up notifications for {email}')
+        except Exception as exc:
+            log(f'Failed to enqueue catch-up notifications: {exc}')
 
     return redirect('/')
 
