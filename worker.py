@@ -141,6 +141,17 @@ def process_task(body):
         # otherwise, process OCR task as normal
         log(f'Processing task for {filename}')
 
+        # If no filepath is provided, assume this is a record-only notification (DB record exists)
+        # and we already have `ocr_text` saved. In that case, send notifications to subscribers
+        # instead of attempting to re-open the image file.
+        if not filepath:
+            if ocr_text:
+                log(f'No filepath for {filename}; sending stored OCR text to subscribers')
+                send_email_notification(filename, description, ocr_text)
+            else:
+                log(f'No filepath and no OCR text for {filename}; skipping')
+            return
+
         img = Image.open(filepath)
         d = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
         draw = ImageDraw.Draw(img)
