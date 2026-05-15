@@ -130,8 +130,17 @@ metadata:
   name: smtp-credentials
 type: Opaque
 stringData:
-  username: your-smtp-user
-  password: your-smtp-password
+  username: replace-me
+  password: replace-me
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: email-recipient
+type: Opaque
+stringData:
+  address: demeny.balint@gmail.com
 
 ---
 apiVersion: apps/v1
@@ -225,11 +234,18 @@ spec:
                   name: rabbitmq-credentials
                   key: password
             - name: EMAIL_TO
-              value: demeny.balint@gmail.com
+              valueFrom:
+                secretKeyRef:
+                  name: email-recipient
+                  key: address
             - name: SMTP_HOST
               value: mx.vpk.bme.hu
             - name: SMTP_PORT
               value: "587"
+            - name: SMTP_USE_STARTTLS
+              value: "true"
+            - name: SMTP_USE_SSL
+              value: "false"
             - name: SMTP_USER
               valueFrom:
                 secretKeyRef:

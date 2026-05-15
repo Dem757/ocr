@@ -16,6 +16,8 @@ def send_email_notification(filename, description, ocr_text):
     smtp_user = os.getenv('SMTP_USER')
     smtp_pass = os.getenv('SMTP_PASS')
     email_from = os.getenv('EMAIL_FROM', smtp_user or 'ocr@example.com')
+    use_ssl = os.getenv('SMTP_USE_SSL', 'false').lower() == 'true'
+    use_starttls = os.getenv('SMTP_USE_STARTTLS', 'true').lower() == 'true'
 
     if not recipient or not smtp_host:
         print('Email notification skipped: EMAIL_TO or SMTP_HOST is not configured')
@@ -33,8 +35,10 @@ def send_email_notification(filename, description, ocr_text):
     )
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
+        smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+        with smtp_class(smtp_host, smtp_port) as server:
+            if use_starttls and not use_ssl:
+                server.starttls()
             if smtp_user and smtp_pass:
                 server.login(smtp_user, smtp_pass)
             server.send_message(message)
