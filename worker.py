@@ -72,9 +72,9 @@ def init_db():
         conn = psycopg2.connect(db_url)
         cur = conn.cursor()
         cur.execute('''CREATE TABLE IF NOT EXISTS uploads 
-                       (id SERIAL PRIMARY KEY, filename TEXT, description TEXT, ocr_text TEXT)''')
-            cur.execute('''CREATE TABLE IF NOT EXISTS subscribers
-                           (email TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT now())''')
+                   (id SERIAL PRIMARY KEY, filename TEXT, description TEXT, ocr_text TEXT)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS subscribers
+                   (email TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT now())''')
         conn.commit()
         cur.close()
         conn.close()
