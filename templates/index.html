@@ -478,6 +478,28 @@
         </section>
     </main>
 
+    <main class="shell">
+        <section class="panel">
+            <h2>Értesítési lista</h2>
+            <p>Ide felvehetsz egy e-mail címet, amire elküldjük a korábbi és az új feltöltések értesítéseit.</p>
+            <form action="/subscribe" method="post" style="display:flex;gap:0.5rem;align-items:center;">
+                <input type="email" name="email" placeholder="email@pelda.hu" required style="flex:1;padding:0.6rem;border-radius:8px;border:1px solid #ddd;">
+                <button type="submit">Feliratkozás</button>
+            </form>
+
+            <div style="margin-top:1rem">
+                <strong>Jelenlegi e-mail címek:</strong>
+                <ul>
+                    {% for s in subscribers %}
+                    <li>{{ s }}</li>
+                    {% else %}
+                    <li>Nincs feliratkozó</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </section>
+    </main>
+
     <script>
         const fileInput = document.getElementById('image');
         const fileName = document.getElementById('fileName');

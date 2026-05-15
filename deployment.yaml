@@ -114,35 +114,6 @@ spec:
       nodePort: 30007
 
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: rabbitmq-credentials
-type: Opaque
-stringData:
-  username: rabbit
-  password: changeme
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: smtp-credentials
-type: Opaque
-stringData:
-  username: replace-me
-  password: replace-me
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: email-recipient
-type: Opaque
-stringData:
-  address: demeny.balint@gmail.com
-
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -233,11 +204,6 @@ spec:
                 secretKeyRef:
                   name: rabbitmq-credentials
                   key: password
-            - name: EMAIL_TO
-              valueFrom:
-                secretKeyRef:
-                  name: email-recipient
-                  key: address
             - name: SMTP_HOST
               value: mx.vpk.bme.hu
             - name: SMTP_PORT

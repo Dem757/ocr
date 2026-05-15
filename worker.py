@@ -14,7 +14,22 @@ def log(message):
 
 
 def send_email_notification(filename, description, ocr_text):
-    recipient = os.getenv('EMAIL_TO')
+    # send to all subscribers from the database
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("SELECT email FROM subscribers ORDER BY created_at ASC")
+        subs = [row[0] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+    except OperationalError as exc:
+        log(f'Failed to load subscribers: {exc}')
+        subs = []
+
+    if not subs:
+        log('No subscribers configured; skipping email send')
+        return
+
     smtp_host = os.getenv('SMTP_HOST')
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     smtp_user = os.getenv('SMTP_USER')
@@ -23,14 +38,13 @@ def send_email_notification(filename, description, ocr_text):
     use_ssl = os.getenv('SMTP_USE_SSL', 'false').lower() == 'true'
     use_starttls = os.getenv('SMTP_USE_STARTTLS', 'true').lower() == 'true'
 
-    if not recipient or not smtp_host:
-        log('Email notification skipped: EMAIL_TO or SMTP_HOST is not configured')
+    if not smtp_host:
+        log('SMTP_HOST not configured; skipping email')
         return
 
     message = EmailMessage()
     message['Subject'] = f'OCR completed: {filename}'
     message['From'] = email_from
-    message['To'] = recipient
     message.set_content(
         f"OCR processing finished.\n\n"
         f"File: {filename}\n"
@@ -38,17 +52,19 @@ def send_email_notification(filename, description, ocr_text):
         f"Detected text: {ocr_text or '(none)'}\n"
     )
 
-    try:
-        smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
-        with smtp_class(smtp_host, smtp_port) as server:
-            if use_starttls and not use_ssl:
-                server.starttls()
-            if smtp_user and smtp_pass:
-                server.login(smtp_user, smtp_pass)
-            server.send_message(message)
-        log(f'Notification email sent to {recipient}')
-    except Exception as exc:
-        log(f'Failed to send notification email: {exc}')
+    smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+    for recipient in subs:
+        try:
+            message['To'] = recipient
+            with smtp_class(smtp_host, smtp_port) as server:
+                if use_starttls and not use_ssl:
+                    server.starttls()
+                if smtp_user and smtp_pass:
+                    server.login(smtp_user, smtp_pass)
+                server.send_message(message)
+            log(f'Notification email sent to {recipient}')
+        except Exception as exc:
+            log(f'Failed to send notification email to {recipient}: {exc}')
 
 
 def init_db():
@@ -57,6 +73,8 @@ def init_db():
         cur = conn.cursor()
         cur.execute('''CREATE TABLE IF NOT EXISTS uploads 
                        (id SERIAL PRIMARY KEY, filename TEXT, description TEXT, ocr_text TEXT)''')
+            cur.execute('''CREATE TABLE IF NOT EXISTS subscribers
+                           (email TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT now())''')
         conn.commit()
         cur.close()
         conn.close()

@@ -25,6 +25,8 @@ def init_db():
         cur = conn.cursor()
         cur.execute('''CREATE TABLE IF NOT EXISTS uploads 
                        (id SERIAL PRIMARY KEY, filename TEXT, description TEXT, ocr_text TEXT)''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS subscribers
+                       (email TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT now())''')
         conn.commit()
         cur.close()
         conn.close()
@@ -107,9 +109,78 @@ def get_uploads():
         log(f'Failed to load uploads: {exc}')
         return []
 
+
+def get_subscribers():
+    if not db_ready:
+        return []
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("SELECT email FROM subscribers ORDER BY created_at ASC")
+        subs = [row[0] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return subs
+    except OperationalError as exc:
+        log(f'Failed to load subscribers: {exc}')
+        return []
+
+
+def add_subscriber(email):
+    if not db_ready:
+        return False
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO subscribers (email) VALUES (%s) ON CONFLICT DO NOTHING", (email,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except OperationalError as exc:
+        log(f'Failed to add subscriber: {exc}')
+        return False
+
+
+def send_email_via_smtp(recipient, subject, body):
+    import smtplib
+    from email.message import EmailMessage
+
+    smtp_host = os.getenv('SMTP_HOST')
+    smtp_port = int(os.getenv('SMTP_PORT', '587'))
+    smtp_user = os.getenv('SMTP_USER')
+    smtp_pass = os.getenv('SMTP_PASS')
+    email_from = os.getenv('EMAIL_FROM', smtp_user or 'ocr@example.com')
+    use_ssl = os.getenv('SMTP_USE_SSL', 'false').lower() == 'true'
+    use_starttls = os.getenv('SMTP_USE_STARTTLS', 'true').lower() == 'true'
+
+    if not smtp_host:
+        log('SMTP_HOST not configured; skipping email')
+        return False
+
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = email_from
+    msg['To'] = recipient
+    msg.set_content(body)
+
+    try:
+        smtp_cls = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+        with smtp_cls(smtp_host, smtp_port) as server:
+            if use_starttls and not use_ssl:
+                server.starttls()
+            if smtp_user and smtp_pass:
+                server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        log(f'Email sent to {recipient}')
+        return True
+    except Exception as exc:
+        log(f'Failed to send email to {recipient}: {exc}')
+        return False
+
 @app.route('/')
 def index():
-    return render_template('index.html', uploads=get_uploads())
+    return render_template('index.html', uploads=get_uploads(), subscribers=get_subscribers())
 
 
 @app.route('/uploads/<path:filename>')
@@ -161,6 +232,28 @@ def upload():
             log(f'Published OCR task for {file.filename}')
         except Exception as exc:
             log(f'Failed to publish message to RabbitMQ: {exc}')
+
+    return redirect('/')
+
+
+@app.route('/subscribe', methods=['POST'])
+def subscribe():
+    email = request.form.get('email')
+    if not email:
+        return redirect('/')
+
+    added = add_subscriber(email)
+    if added:
+        # send all existing uploads to the new subscriber
+        uploads = get_uploads()
+        for up in uploads:
+            subject = f'OCR result: {up["filename"] if isinstance(up, dict) else up[0]}'
+            # up structure from get_uploads is dict
+            fname = up['filename']
+            desc = up.get('description', '')
+            ocr_text = up.get('ocr_text', '')
+            body = f"File: {fname}\nDescription: {desc}\n\nDetected text:\n{ocr_text}"
+            send_email_via_smtp(email, subject, body)
 
     return redirect('/')
 
