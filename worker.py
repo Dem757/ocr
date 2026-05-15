@@ -9,6 +9,10 @@ db_pass = os.getenv('DB_PASS')
 db_url = os.getenv('DATABASE_URL') or f"host=ocr-db port=5444 dbname=ocrdb user=user password={db_pass}"
 
 
+def log(message):
+    print(message, flush=True)
+
+
 def send_email_notification(filename, description, ocr_text):
     recipient = os.getenv('EMAIL_TO')
     smtp_host = os.getenv('SMTP_HOST')
@@ -20,7 +24,7 @@ def send_email_notification(filename, description, ocr_text):
     use_starttls = os.getenv('SMTP_USE_STARTTLS', 'true').lower() == 'true'
 
     if not recipient or not smtp_host:
-        print('Email notification skipped: EMAIL_TO or SMTP_HOST is not configured')
+        log('Email notification skipped: EMAIL_TO or SMTP_HOST is not configured')
         return
 
     message = EmailMessage()
@@ -42,9 +46,9 @@ def send_email_notification(filename, description, ocr_text):
             if smtp_user and smtp_pass:
                 server.login(smtp_user, smtp_pass)
             server.send_message(message)
-        print(f'Notification email sent to {recipient}')
+        log(f'Notification email sent to {recipient}')
     except Exception as exc:
-        print(f'Failed to send notification email: {exc}')
+        log(f'Failed to send notification email: {exc}')
 
 
 def init_db():
@@ -57,7 +61,7 @@ def init_db():
         cur.close()
         conn.close()
     except OperationalError as exc:
-        print(f'Database unavailable during worker startup: {exc}')
+        log(f'Database unavailable during worker startup: {exc}')
 
 
 def save_upload_record(filename, description, ocr_text):
@@ -70,7 +74,7 @@ def save_upload_record(filename, description, ocr_text):
         cur.close()
         conn.close()
     except OperationalError as exc:
-        print(f'Failed to save upload record: {exc}')
+        log(f'Failed to save upload record: {exc}')
 
 
 def process_task(body):
@@ -80,6 +84,8 @@ def process_task(body):
         filepath = task.get('filepath')
         description = task.get('description', '')
         upload_folder = task.get('upload_folder', UPLOAD_FOLDER)
+
+        log(f'Processing task for {filename}')
 
         img = Image.open(filepath)
         d = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
@@ -101,7 +107,7 @@ def process_task(body):
         save_upload_record(proc_filename, description, ocr_text)
         send_email_notification(proc_filename, description, ocr_text)
     except Exception as exc:
-        print(f'Error processing task: {exc}')
+        log(f'Error processing task: {exc}')
 
 
 def main():
@@ -113,15 +119,18 @@ def main():
     if rabbit_user and rabbit_pass:
         creds = pika.PlainCredentials(rabbit_user, rabbit_pass)
     params = pika.ConnectionParameters(host=rabbit_host, credentials=creds) if creds else pika.ConnectionParameters(host=rabbit_host)
+    log(f'Worker starting. RabbitMQ host={rabbit_host}, queue=ocr_tasks')
 
     while True:
         try:
             connection = pika.BlockingConnection(params)
             channel = connection.channel()
             channel.queue_declare(queue='ocr_tasks', durable=True)
+            log('Connected to RabbitMQ and waiting for messages')
 
             for method, properties, body in channel.consume('ocr_tasks', inactivity_timeout=1):
                 if body:
+                    log('Received message from RabbitMQ')
                     process_task(body)
                     channel.basic_ack(method.delivery_tag)
                 else:
@@ -129,7 +138,7 @@ def main():
                     pass
 
         except Exception as exc:
-            print(f'Worker connection error: {exc}')
+            log(f'Worker connection error: {exc}')
             time.sleep(5)
 
 

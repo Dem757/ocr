@@ -10,6 +10,10 @@ db_pass = os.getenv('DB_PASS')
 db_url = os.getenv('DATABASE_URL') or f"host=ocr-db port=5444 dbname=ocrdb user=user password={db_pass}"
 db_ready = False
 
+
+def log(message):
+    print(message, flush=True)
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Adatbázis inicializálás [cite: 92]
@@ -27,7 +31,7 @@ def init_db():
         db_ready = True
     except OperationalError as exc:
         db_ready = False
-        print(f'Database unavailable during startup: {exc}')
+        log(f'Database unavailable during startup: {exc}')
 
 
 def save_upload_record(filename, description, ocr_text):
@@ -43,7 +47,7 @@ def save_upload_record(filename, description, ocr_text):
         cur.close()
         conn.close()
     except OperationalError as exc:
-        print(f'Failed to save upload record: {exc}')
+        log(f'Failed to save upload record: {exc}')
 
 
 def get_uploads():
@@ -66,7 +70,7 @@ def get_uploads():
         conn.close()
         return uploads
     except OperationalError as exc:
-        print(f'Failed to load uploads: {exc}')
+        log(f'Failed to load uploads: {exc}')
         return []
 
 @app.route('/')
@@ -86,6 +90,7 @@ def upload():
     if file:
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(filepath)
+        log(f'Received upload {file.filename}; publishing OCR task')
         # Publish a task to RabbitMQ for asynchronous processing
         msg = {
             'filename': file.filename,
@@ -111,8 +116,9 @@ def upload():
                 properties=pika.BasicProperties(delivery_mode=2)
             )
             connection.close()
+            log(f'Published OCR task for {file.filename}')
         except Exception as exc:
-            print(f'Failed to publish message to RabbitMQ: {exc}')
+            log(f'Failed to publish message to RabbitMQ: {exc}')
         
     return redirect('/')
 
