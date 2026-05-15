@@ -167,6 +167,38 @@
             line-height: 1.65;
         }
 
+        .subscriber-list {
+            margin-top: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .subscriber-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            padding: 0.45rem 0.6rem;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.6);
+            border: 1px solid rgba(22,32,51,0.04);
+        }
+
+        .unsubscribe-button {
+            border: 0;
+            background: transparent;
+            color: #d64545;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0.35rem 0.6rem;
+            border-radius: 8px;
+        }
+
+        .unsubscribe-button:hover {
+            background: rgba(214,69,69,0.06);
+        }
+
         .gallery-section {
             margin-top: 1.25rem;
             display: grid;
@@ -489,13 +521,21 @@
 
             <div style="margin-top:1rem">
                 <strong>Jelenlegi e-mail címek:</strong>
-                <ul>
-                    {% for s in subscribers %}
-                    <li>{{ s }}</li>
+                <div class="subscriber-list">
+                    {% if subscribers %}
+                        {% for s in subscribers %}
+                        <div class="subscriber-item">
+                            <div>{{ s }}</div>
+                            <form action="/unsubscribe" method="post" style="margin:0">
+                                <input type="hidden" name="email" value="{{ s }}">
+                                <button type="submit" class="unsubscribe-button">Törlés</button>
+                            </form>
+                        </div>
+                        {% endfor %}
                     {% else %}
-                    <li>Nincs feliratkozó</li>
-                    {% endfor %}
-                </ul>
+                        <div class="empty-state">Nincs feliratkozó</div>
+                    {% endif %}
+                </div>
             </div>
         </section>
     </main>

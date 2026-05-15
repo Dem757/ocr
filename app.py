@@ -142,6 +142,22 @@ def add_subscriber(email):
         return False
 
 
+def delete_subscriber(email):
+    if not db_ready:
+        return False
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM subscribers WHERE email = %s", (email,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+    except OperationalError as exc:
+        log(f'Failed to delete subscriber: {exc}')
+        return False
+
+
 def send_email_via_smtp(recipient, subject, body):
     import smtplib
     from email.message import EmailMessage
@@ -255,6 +271,16 @@ def subscribe():
             body = f"File: {fname}\nDescription: {desc}\n\nDetected text:\n{ocr_text}"
             send_email_via_smtp(email, subject, body)
 
+    return redirect('/')
+
+
+@app.route('/unsubscribe', methods=['POST'])
+def unsubscribe():
+    email = request.form.get('email')
+    if email:
+        deleted = delete_subscriber(email)
+        if deleted:
+            log(f'Removed subscriber {email}')
     return redirect('/')
 
 if __name__ == '__main__':
